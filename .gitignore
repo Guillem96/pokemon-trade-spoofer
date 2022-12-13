@@ -1,0 +1,15 @@
+# GameBoy emulator and Pokemon ROM
+emulator/
+
+# Python virtual environment
+.venv/
+
+# Python
+__pycache__/
+.mypy_cache/
+.python-version
+
+# Trade dumps
+dumps/
+log.csv
+

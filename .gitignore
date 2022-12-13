@@ -1,3 +1,9 @@
+# Visual Studio Code
+.vscode/
+
+# macos
+.DS_Store
+
 # GameBoy emulator and Pokemon ROM
 emulator/
 
@@ -9,7 +15,7 @@ __pycache__/
 .mypy_cache/
 .python-version
 
-# Trade dumps
-dumps/
-log.csv
-
+# Logs and traffic dumps
+dumps/*
+logs/*
+!.gitkeep

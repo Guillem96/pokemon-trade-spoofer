@@ -1,0 +1,54 @@
+version: 1
+disable_existing_loggers: true
+
+formatters:
+  standard:
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  error:
+    format: "%(levelname)s <PID %(process)d:%(processName)s> %(name)s.%(funcName)s(): %(message)s"
+  pkmn_trafic:
+    format: "%(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: standard
+    filters: [no_pkmn_packets]
+    stream: ext://sys.stdout
+
+  debug_file:
+    class: logging.FileHandler
+    level: DEBUG
+    formatter: standard
+    filters: [no_pkmn_packets]
+    filename: logs/debug.log
+    encoding: utf8
+
+  debug_pokemon_traffic:
+    class: logging.FileHandler
+    level: DEBUG
+    formatter: pkmn_trafic
+    filters: [pkmn_packets]
+    filename: dumps/traffic.log
+    encoding: utf8
+
+filters:
+  pkmn_packets:
+    (): pkm_trade_spoofer.logger.PokemonPacketsFilter
+
+  no_pkmn_packets:
+    (): pkm_trade_spoofer.logger.NoPokemonPacketsFilter
+
+root:
+  level: NOTSET
+  handlers: [console]
+  propogate: yes
+
+loggers:
+  pkm_trade_spoofer:
+    level: DEBUG
+    handlers:
+      - console
+      - debug_file
+      - debug_pokemon_traffic

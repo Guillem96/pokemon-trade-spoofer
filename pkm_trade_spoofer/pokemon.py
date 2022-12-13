@@ -4,7 +4,7 @@ from typing import NamedTuple, Optional, cast
 
 import pokebase as pb
 
-from models import PP, EVs, Pokemon, Stats
+from pkm_trade_spoofer.models import PP, EVs, Pokemon, Stats
 
 
 class ApiLink(NamedTuple):

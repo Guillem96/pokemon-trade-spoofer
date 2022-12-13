@@ -7,8 +7,8 @@ POKE_TEXT_TERMINATOR = 0x50
 POKE_TEXT_MAX_LEN = 10
 POKE_LIST_TERMINATOR = 0xFF
 
+POKEMON_N_BYTES = 48
 MAX_PARTY_POKEMON = 6
-PREAMBLE_VALUE = 0xFD
 
 ifb_fn = functools.partial(int.from_bytes, byteorder="big")
 
@@ -82,10 +82,6 @@ class Stats:
 
 # Generation 2 pokemon binary protocol:
 # https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_data_structure_(Generation_II)
-
-POKEMON_N_BYTES = 48
-
-
 @dataclass
 class Pokemon:
     dex_id: int
@@ -97,7 +93,7 @@ class Pokemon:
     evs: EVs
     ivs: EVs
     friendship_remaining_egg_cycles: int
-    pokerus: int # TODO: Figure out pokerus values
+    pokerus: int  # TODO: Figure out pokerus values
     caught_data: int
     level: int
     status_cond: int
@@ -170,7 +166,8 @@ class Pokemon:
         )
 
 
-# Party protocol: https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_data_structure_(Generation_I)
+# Party protocol:
+# https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_data_structure_(Generation_I)
 PARTY_N_BYTES = (
     (POKE_TEXT_MAX_LEN + 1)
     + 10

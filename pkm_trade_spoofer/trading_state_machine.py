@@ -1,11 +1,11 @@
 import abc
 import asyncio
-import pathlib
 import random
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
-from models import Party
+from pkm_trade_spoofer import logger
+from pkm_trade_spoofer.models import Party
 
 _MASTER_MAGIC = 0x01
 _SLAVE_MAGIC = 0x02
@@ -18,21 +18,26 @@ _EXIT_SELECTION_MAGIC = 0x7F
 _CANCEL_MAGIC = 0x71
 _CONFIRM_MAGIC = 0x72
 
-LOG_FILE = pathlib.Path("log.csv").open("w")
+LOGGER = logger.get_logger(__name__)
+
 
 @dataclass
-class Context:
+class TradeStateMachineContext:
     reader: asyncio.Queue[int]
     writer: Callable[[int], Awaitable[None]]
     pkm_party: Party
     other_pkm_party: Optional[Party] = None
+
+    # Pokemon id to send
     me_sends: Optional[int] = None
+
+    # Pokemon id that the other player is sending
     other_sends: Optional[int] = None
 
 
 class State(abc.ABC):
     @abc.abstractmethod
-    async def run(self, ctx: Context) -> Optional["State"]:
+    async def run(self, ctx: TradeStateMachineContext) -> Optional["State"]:
         ...
 
     def __repr__(self) -> str:
@@ -43,68 +48,77 @@ class State(abc.ABC):
 
 
 class TradingPokemonStateMachine(object):
-    def __init__(self, initial_state: "State", context: Context) -> None:
+    def __init__(
+        self,
+        initial_state: "State",
+        context: TradeStateMachineContext,
+    ) -> None:
         self._initial_state = initial_state
         self._context = context
 
     async def __call__(self) -> None:
-        prev_state = self._initial_state
-        next_state = await self._initial_state.run(self._context)
-        if prev_state is not next_state:
-            print(f"Switching state from {prev_state} to {next_state}")
+        next_state: Optional[State] = self._initial_state
 
         while next_state is not None:
             prev_state = next_state
             next_state = await next_state.run(self._context)
             if prev_state is not next_state:
-                print(f"Switching state from {prev_state} to {next_state}")
+                LOGGER.info(f"Switching state from {prev_state} to {next_state}")
 
 
 class NotConnectedState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """Initial state when Pokemon trader spoofer is waiting for player to connect."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         data = await ctx.reader.get()
         ctx.reader.task_done()
+
         if data == _MASTER_MAGIC:
             await ctx.writer(_SLAVE_MAGIC)
-            LOG_FILE.write(f"0x{data:02x},0x{_SLAVE_MAGIC:02x},{self}\n")
+            _log_traffic(data, _SLAVE_MAGIC, self)
 
         elif data == _SLAVE_MAGIC:
             await ctx.writer(_MASTER_MAGIC)
-            LOG_FILE.write(f"0x{data:02x},0x{_MASTER_MAGIC:02x},{self}\n")
+            _log_traffic(data, _MASTER_MAGIC, self)
 
         elif data == _CONNECTED_MAGIC:
             await ctx.writer(_CONNECTED_MAGIC)
-            LOG_FILE.write(f"0x{data:02x},0x{_CONNECTED_MAGIC:02x},{self}\n")
+            _log_traffic(data, _CONNECTED_MAGIC, self)
             return WaitForState(_IN_TRADE_ROOM_MAGIC, next_state=InTradeRoomState())
-        
+
         # echo
         await ctx.writer(data)
-        LOG_FILE.write(f"0x{data:02x},0x{data:02x},{self}\n")
-
+        _log_traffic(data, data, self)
         return self
 
 
 class InTradeRoomState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """Both players are waiting in the trade room."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         return WaitForState(_TERMINATOR_MAGIC, next_state=SendingRandomSeedState())
 
 
 class SendingRandomSeedState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """When sitting in the trading machine, some random numbers are interchanged."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         return WaitForState(
-            _TERMINATOR_MAGIC, 
+            _TERMINATOR_MAGIC,
             next_state=InterchangePokemonTeamsState(),
         )
 
 
 class InterchangePokemonTeamsState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """Interchange pokemon parties."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         other_party_bs = []
         for pb in ctx.pkm_party.serialize():
             opb = await ctx.reader.get()
             other_party_bs.append(opb)
             await ctx.writer(pb)
-            LOG_FILE.write(f"0x{opb:02x},0x{pb:02x},{self}\n")
+            _log_traffic(opb, pb, self)
             ctx.reader.task_done()
 
         ctx.other_pkm_party = Party.from_bytes(other_party_bs)
@@ -113,14 +127,17 @@ class InterchangePokemonTeamsState(State):
 
 
 class SelectingPokemonState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """Players are selecting which pokemon to trade."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         data = await ctx.reader.get()
         if data >= _FIRST_POKEMON_MAGIC and data <= _LAST_POKEMON_MAGIC:
             ctx.me_sends = random.choice(list(range(len(ctx.pkm_party.pokemon))))
             await ctx.writer(ctx.me_sends + _FIRST_POKEMON_MAGIC)
-            LOG_FILE.write(f"0x{data:02x},0x{ctx.me_sends + _FIRST_POKEMON_MAGIC:02x},{self}\n")
-
             ctx.reader.task_done()
+
+            _log_traffic(data, ctx.me_sends + _FIRST_POKEMON_MAGIC, self)
+
             ctx.other_sends = data - _FIRST_POKEMON_MAGIC
             return WaitWhileState(
                 data,
@@ -131,23 +148,29 @@ class SelectingPokemonState(State):
         if data == _EXIT_SELECTION_MAGIC:
             await ctx.writer(_EXIT_SELECTION_MAGIC)
             ctx.reader.task_done()
+
+            _log_traffic(data, _EXIT_SELECTION_MAGIC, self)
             return WaitWhileState(data, next_state=InTradeRoomState())
 
         # echo
-        LOG_FILE.write(f"0x{data:02x},0x{data:02x},{self}\n")
-
         await ctx.writer(data)
-
         ctx.reader.task_done()
+
+        _log_traffic(data, data, self)
         return self
 
 
 class WaitingTradeConfirmState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """Accept or cancel the trade."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         data = await ctx.reader.get()
+        await ctx.writer(data)
+        ctx.reader.task_done()
+
+        _log_traffic(data, data, self)
+
         if data == _CANCEL_MAGIC:
-            await ctx.writer(_CANCEL_MAGIC)
-            LOG_FILE.write(f"0x{data:02x},0x{_CANCEL_MAGIC:02x},{self}\n")
             return WaitWhileState(
                 _CANCEL_MAGIC,
                 echo_value=_CANCEL_MAGIC,
@@ -155,25 +178,24 @@ class WaitingTradeConfirmState(State):
             )
 
         if data == _CONFIRM_MAGIC:
-            await ctx.writer(_CONFIRM_MAGIC)
-            LOG_FILE.write(f"0x{data:02x},0x{_CONFIRM_MAGIC:02x},{self}\n")
             return WaitWhileState(
                 _CONFIRM_MAGIC,
                 echo_value=_CONFIRM_MAGIC,
                 next_state=TradingPokemonState(),
             )
 
-        LOG_FILE.write(f"0x{data:02x},0x{data:02x},{self}\n")
-        ctx.reader.task_done()
-        await ctx.writer(data)
         return self
 
 
 class TradingPokemonState(State):
-    async def run(self, ctx: Context) -> Optional[State]:
+    """Trading the pokemon, waiting for the trade to successfully finish."""
+
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         data = await ctx.reader.get()
         await ctx.writer(data)
         ctx.reader.task_done()
+
+        _log_traffic(data, data, self)
 
         if data == _TERMINATOR_MAGIC:
             if ctx.me_sends is None:
@@ -205,13 +227,16 @@ class TradingPokemonState(State):
             ctx.other_pkm_party = None
 
             return WaitWhileState(
-                _TERMINATOR_MAGIC, next_state=SendingRandomSeedState(),
+                _TERMINATOR_MAGIC,
+                next_state=SendingRandomSeedState(),
             )
 
         return self
 
 
 class WaitForState(State):
+    """Wait for a specify magic byte in the reader."""
+
     def __init__(
         self,
         wait_for_value: int,
@@ -223,11 +248,10 @@ class WaitForState(State):
         self.next_state = next_state
         self.echo_value = echo_value
 
-    async def run(self, ctx: Context) -> Optional[State]:
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         value = await ctx.reader.get()
         await ctx.writer(value if self.echo_value is None else self.echo_value)
-        
-        LOG_FILE.write(f"0x{value:02x},0x{value if self.echo_value is None else self.echo_value:02x},{self}\n")
+        _log_traffic(value, value if self.echo_value is None else self.echo_value, self)
 
         ctx.reader.task_done()
 
@@ -244,10 +268,13 @@ class WaitForState(State):
             f"{self.__class__.__name__}("
             f"wait_for_value=0x{self.wait_for_value:02x},"
             f"next_state={self.next_state},"
-            f"echo_value={self.echo_value})")
+            f"echo_value={self.echo_value})"
+        )
 
 
 class WaitWhileState(State):
+    """Wait while the reader if full of a given magic byte."""
+
     def __init__(
         self,
         wait_while_value: int,
@@ -261,17 +288,17 @@ class WaitWhileState(State):
         self.delay = delay
         self.echo_value = echo_value
 
-    async def run(self, ctx: Context) -> Optional[State]:
+    async def run(self, ctx: TradeStateMachineContext) -> Optional[State]:
         if ctx.reader.empty():
             await asyncio.sleep(self.delay)
             return self
 
         # Hack to peek a value
-        value = ctx.reader._queue[0] # type: ignore
+        value = ctx.reader._queue[0]  # type: ignore
 
         # echo
         await ctx.writer(value if self.echo_value is None else self.echo_value)
-        LOG_FILE.write(f"0x{value:02x},0x{value if self.echo_value is None else self.echo_value:02x},{self}\n")
+        _log_traffic(value, value if self.echo_value is None else self.echo_value, self)
 
         # If value is different from `wait_while_value` do not pop it
         # and move to the next state
@@ -290,4 +317,9 @@ class WaitWhileState(State):
             f"{self.__class__.__name__}("
             f"wait_while_value=0x{self.wait_while_value:02x}, "
             f"next_state={self.next_state}, "
-            f"echo_value={self.echo_value})")
+            f"echo_value={self.echo_value})"
+        )
+
+
+def _log_traffic(recv: int, sent: int, state: State) -> None:
+    LOGGER.debug(f"Pokemon packet: 0x{recv:02x},0x{sent:02x},{state}")

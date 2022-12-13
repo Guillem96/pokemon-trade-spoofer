@@ -9,7 +9,9 @@ PACKET_FORMAT = "<4BI"
 
 HandlerFn = Callable[["GameBoyPacket"], Awaitable[None]]
 WriterFn = Callable[[int], Awaitable[None]]
-SlaveMasterDataTaskFn = Callable[[asyncio.Queue[int], WriterFn], Coroutine[Any, Any, None]]
+SlaveMasterDataTaskFn = Callable[
+    [asyncio.Queue[int], WriterFn], Coroutine[Any, Any, None]
+]
 
 
 class GBPacketType(enum.IntEnum):
@@ -133,9 +135,9 @@ class BGBLinkCableConnection(object):
 
         self._handlers: dict[GBPacketType, HandlerFn] = {
             GBPacketType.VERSION: self._handle_version,
-            GBPacketType.JOYPAD_UPDATE: self._handle_joypad_update,
             GBPacketType.SYNC3: self._handle_sync3,
             GBPacketType.STATUS: self._handle_status,
+            GBPacketType.JOYPAD_UPDATE: self._handle_joypad,
             GBPacketType.WANT_DISCONNECT: self._handle_want_disconnect,
         }
 
@@ -156,7 +158,10 @@ class BGBLinkCableConnection(object):
             self._loop.call_exception_handler(
                 {
                     "exception": exc_group,
-                    "message": f"{self.__class__.__name__} task group has unhandled exceptions.",
+                    "message": (
+                        f"{self.__class__.__name__} task group has unhandled "
+                        "exceptions."
+                    ),
                 }
             )
 
@@ -218,28 +223,11 @@ class BGBLinkCableConnection(object):
 
         await self.writer.write_version()
 
-    async def _handle_joypad_update(self, _: GameBoyPacket) -> None:
-        # Do nothing. This is intended to control an emulator remotely.
-        pass
-
-    # async def _handle_sync1(self, packet: GameBoyPacket) -> None:
-    #     if self.master_data_handler is not None:
-    #         response = self.master_data_handler(packet.b2)
-    #         if response is not None:
-    #             await self.writer.write_slave(response)
-    #     else:
-    #         # Indicates no response from the GB
-    #         await self.writer.write_sync3(packet)
-
-    # async def _handle_sync2(self, packet: GameBoyPacket) -> None:
-    #     # Data received from slave
-    #     if self.slave_data_handler is not None:
-    #         response = self.slave_data_handler(packet.b2)
-    #         if response:
-    #             await self.writer.write_master(response)
-
     async def _handle_sync3(self, packet: GameBoyPacket) -> None:
         await self.writer.write_sync3(packet)
+
+    async def _handle_joypad(self, _: GameBoyPacket) -> None:
+        ...
 
     async def _handle_status(self, packet: GameBoyPacket) -> None:
         # TODO: stop logic when client is paused
@@ -264,12 +252,10 @@ class BGBLinkCableServer:
 
     def __init__(
         self,
-        verbose: bool = False,
         host: str = "",
         port: int = 8765,
         loop: Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
-        self.verbose = verbose
         self.host = host
         self.port = port
         self._connections: list[asyncio.Task] = []

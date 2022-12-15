@@ -1,11 +1,18 @@
 import logging
-import os
+import sys
 from logging import config as logging_config
+from pathlib import Path
 
 import coloredlogs
 import yaml
 
+import pkm_trade_spoofer
+
 LOGGER = logging.getLogger(__name__)
+if hasattr(sys, "_MEIPASS"):
+    _CONFIG_PATH = Path(sys._MEIPASS) / "configs/logging.yaml"
+else:
+    _CONFIG_PATH = Path(pkm_trade_spoofer.__file__).parent / "configs/logging.yaml"
 
 
 class PokemonPacketsFilter(logging.Filter):
@@ -19,10 +26,10 @@ class NoPokemonPacketsFilter(logging.Filter):
 
 
 def setup_logging(
-    config_path: str = "pkm_trade_spoofer/configs/logging.yaml",
+    config_path: Path = _CONFIG_PATH,
     default_level: int = logging.INFO,
 ) -> None:
-    if os.path.exists(config_path):
+    if config_path.exists():
         with open(config_path, "rt") as f:
             try:
                 config = yaml.safe_load(f.read())

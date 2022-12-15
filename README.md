@@ -31,6 +31,7 @@ execution of the new state.
 
 See in the image below the state machine implemented:
 
+![](img/state-machine.svg)
 
 ## Shout-out and credits
 

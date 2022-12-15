@@ -1,13 +1,17 @@
 import asyncio
+import logging
+import signal
 from typing import Any
+
+import typer
 
 from pkm_trade_spoofer import logger
 from pkm_trade_spoofer.bgb_link_server import BGBLinkCableServer
 from pkm_trade_spoofer.models import EVs, Party
 from pkm_trade_spoofer.pokemon import pokemon_by_id
 from pkm_trade_spoofer.trading_state_machine import (
-    Context,
     NotConnectedState,
+    TradeStateMachineContext,
     TradingPokemonStateMachine,
 )
 
@@ -28,11 +32,20 @@ PARTY = Party(
 ).serialize()
 
 
-def main():
+def main(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    bgb_host: str = "127.0.0.1",
+    bgb_port: int = 9999,
+    secret: str = "",
+) -> None:
     loop = asyncio.new_event_loop()
     loop.set_exception_handler(_exception_handler)
+    loop.add_signal_handler(signal.SIGTERM, lambda: _signal_handler("SIGTERM", loop))
 
-    server = BGBLinkCableServer(host="127.0.0.1", port=9999, loop=loop)
+    LOGGER.setLevel(logging.INFO)
+
+    server = BGBLinkCableServer(host=bgb_host, port=bgb_port, loop=loop)
     try:
         server.run(_master_data_handler_state_machine)
     except KeyboardInterrupt:
@@ -44,12 +57,23 @@ def main():
 
 
 async def _master_data_handler_state_machine(reader, writer) -> None:
-    ctx = Context(reader=reader, writer=writer, pkm_party=Party.from_bytes(PARTY))
+    ctx = TradeStateMachineContext(
+        reader=reader,
+        writer=writer,
+        pkm_party=Party.from_bytes(PARTY),
+    )
+
     state_machine = TradingPokemonStateMachine(
         initial_state=NotConnectedState(),
         context=ctx,
     )
+
     await state_machine()
+
+
+def _signal_handler(signal: str, loop: asyncio.AbstractEventLoop) -> None:
+    LOGGER.info(f"Received {signal}. Stopping execution...")
+    loop.stop()
 
 
 def _exception_handler(loop: asyncio.AbstractEventLoop, ctx: dict[str, Any]) -> None:
@@ -60,4 +84,4 @@ def _exception_handler(loop: asyncio.AbstractEventLoop, ctx: dict[str, Any]) -> 
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)

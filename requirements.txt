@@ -1,2 +1,3 @@
 PyYAML
 coloredlogs
+typer

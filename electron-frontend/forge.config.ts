@@ -12,6 +12,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     extraResource: [
       './python-dist',
+      './node_modules',
     ]
   },
   rebuildConfig: {},

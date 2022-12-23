@@ -27,6 +27,7 @@ if (require('electron-squirrel-startup')) {
 
 const launchPython = (): ChildProcess => {
   const args = [
+    'api',
     '--host',
     PY_HOST,
     '--port',

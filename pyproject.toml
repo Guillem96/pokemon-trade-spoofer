@@ -1,5 +1,51 @@
+[tool.poetry]
+name = "pokemon-trade-spoofer"
+version = "0.0.1"
+description = "Python package to spoof Pokemon trades in Gold/Silver/Crystal versions"
+authors = ["Guillem96 <guillem.orellana@gmail.com>"]
+readme = "README.md"
+repository = "https://github.com/Guillem96/pokemon-trade-spoofer"
+keywords = [
+    "gameboy",
+    "pokemon",
+    "gen-II",
+    "crystal",
+    "gold",
+    "silver",
+    "bgb",
+    "cable",
+    "link",
+    "asyncio",
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+PyYAML = "*"
+typer = { version = "*", extras = ["all"] }
+coloredlogs = "*"
+fastapi = "^0.88.0"
+uvicorn = {version = "^0.20.0", extras = ["standard"]}
+pokebase = "^1.3.0"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+isort = "*"
+black = "*"
+flake8 = "*"
+toml = "*"
+pyinstaller = "*"
+mypy = "^0.991"
+pre-commit = "^2.20.0"
+
 [tool.isort]
 profile = "black"
+
+[tool.mypy]
+plugins = [
+  "pydantic.mypy"
+]
 
 [[tool.mypy.overrides]]
 module = [

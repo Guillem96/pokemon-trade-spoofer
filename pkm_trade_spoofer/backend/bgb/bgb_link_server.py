@@ -1,16 +1,20 @@
 import asyncio
 import enum
 import functools
+import logging
 import struct
 from typing import Any, Awaitable, Callable, Coroutine, NamedTuple, Optional
 
 PACKET_SIZE_BYTES = 8
 PACKET_FORMAT = "<4BI"
+LOGGER = logging.getLogger(__name__)
+
 
 HandlerFn = Callable[["GameBoyPacket"], Awaitable[None]]
 WriterFn = Callable[[int], Awaitable[None]]
 SlaveMasterDataTaskFn = Callable[
-    [asyncio.Queue[int], WriterFn], Coroutine[Any, Any, None]
+    [asyncio.Queue[int], WriterFn],
+    Coroutine[Any, Any, None],
 ]
 
 
@@ -67,7 +71,7 @@ class GameBoyLinkStreamWriter(object):
                     packet.b3,
                     packet.b4,
                     packet.timestamp or 0,
-                )
+                ),
             )
             await self.w.drain()
 
@@ -76,7 +80,7 @@ class GameBoyLinkStreamWriter(object):
             GameBoyPacket(
                 GBPacketType.STATUS,
                 1,  # Running
-            )
+            ),
         )
 
     async def write_version(self) -> None:
@@ -86,7 +90,7 @@ class GameBoyLinkStreamWriter(object):
                 1,  # Major
                 4,  # Minor
                 0,  # Patch
-            )
+            ),
         )
 
     async def write_master(self, data: int) -> None:
@@ -95,7 +99,7 @@ class GameBoyLinkStreamWriter(object):
                 GBPacketType.MASTER,  # Master data packet
                 data,  # Data value
                 0x81,  # Control value
-            )
+            ),
         )
 
     async def write_slave(self, data: int) -> None:
@@ -104,7 +108,7 @@ class GameBoyLinkStreamWriter(object):
                 GBPacketType.SLAVE,  # Slave data packet
                 data,  # Data value
                 0x80,  # Control value
-            )
+            ),
         )
 
     async def write_sync3(self, packet: GameBoyPacket) -> None:
@@ -162,7 +166,7 @@ class BGBLinkCableConnection(object):
                         f"{self.__class__.__name__} task group has unhandled "
                         "exceptions."
                     ),
-                }
+                },
             )
 
     async def _run(self) -> None:
@@ -177,7 +181,7 @@ class BGBLinkCableConnection(object):
                     self.master_data_task_fn(
                         self._master_slave_queues[GBPacketType.MASTER],
                         self.writer.write_slave,
-                    )
+                    ),
                 )
 
             if self.slave_data_task_fn is not None:
@@ -185,7 +189,7 @@ class BGBLinkCableConnection(object):
                     self.slave_data_task_fn(
                         self._master_slave_queues[GBPacketType.SLAVE],
                         self.writer.write_master,
-                    )
+                    ),
                 )
 
             while True:
@@ -255,11 +259,13 @@ class BGBLinkCableServer:
         host: str = "",
         port: int = 8765,
         loop: Optional[asyncio.AbstractEventLoop] = None,
+        blocking: bool = True,
     ) -> None:
         self.host = host
         self.port = port
         self._connections: list[asyncio.Task] = []
         self._loop = loop or asyncio.get_running_loop()
+        self._blocking = blocking
         self._server: Optional[asyncio.AbstractServer] = None
 
     async def _handle_connection(
@@ -278,12 +284,12 @@ class BGBLinkCableServer:
         )
         self._connections.append(self._loop.create_task(connection()))
 
-    def run(
+    async def run(
         self,
         master_data_handler: Optional[SlaveMasterDataTaskFn] = None,
         slave_data_handler: Optional[SlaveMasterDataTaskFn] = None,
     ) -> None:
-        server_coro = asyncio.start_server(
+        self._server = await asyncio.start_server(
             functools.partial(
                 self._handle_connection,
                 master_data_handler=master_data_handler,
@@ -293,10 +299,10 @@ class BGBLinkCableServer:
             self.port,
         )
 
-        self._server = self._loop.run_until_complete(server_coro)
         addrs = ", ".join(str(sock.getsockname()) for sock in self._server.sockets)
-        print(f"Serving on {addrs}")
-        self._loop.run_forever()
+        LOGGER.info(f"BGB Server listening at {addrs}")
+        if self._blocking:
+            await self._server.serve_forever()
 
     def stop(self) -> None:
         if self._connections:
@@ -305,7 +311,7 @@ class BGBLinkCableServer:
             _, pending = self._loop.run_until_complete(asyncio.wait(self._connections))
             if pending:
                 raise asyncio.InvalidStateError(
-                    f"Unexpected state, {pending} should be done."
+                    f"Unexpected state, {pending} should be done.",
                 )
 
         if self._server is not None:

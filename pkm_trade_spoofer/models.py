@@ -2,15 +2,15 @@ import functools
 import struct
 from dataclasses import dataclass
 
-POKE_TEXT_OFS = 0x3F
-POKE_TEXT_TERMINATOR = 0x50
-POKE_TEXT_MAX_LEN = 10
-POKE_LIST_TERMINATOR = 0xFF
+from pkm_trade_spoofer import utils
 
+POKE_TEXT_MAX_LEN = 10
 POKEMON_N_BYTES = 48
 MAX_PARTY_POKEMON = 6
 
-ifb_fn = functools.partial(int.from_bytes, byteorder="big")
+Bytes = list[int] | bytearray
+
+_ifb_fn = functools.partial(int.from_bytes, byteorder="big")
 
 
 @dataclass
@@ -35,9 +35,9 @@ class EVs:
     special: int
 
     @classmethod
-    def parse_ivs(cls, bs: list[int] | bytearray) -> "EVs":
+    def parse_ivs(cls, bs: Bytes) -> "EVs":
         # Attack, Defense, Speed, and Special.
-        iv_repr = ifb_fn(bs)
+        iv_repr = _ifb_fn(bs)
         return cls(
             hp=0,
             attack=iv_repr & 0xF,
@@ -47,13 +47,13 @@ class EVs:
         )
 
     @classmethod
-    def parse_evs(cls, bs: list[int] | bytearray) -> "EVs":
+    def parse_evs(cls, bs: Bytes) -> "EVs":
         return cls(
-            hp=ifb_fn(_pop_n(bs, 2)),
-            attack=ifb_fn(_pop_n(bs, 2)),
-            defense=ifb_fn(_pop_n(bs, 2)),
-            speed=ifb_fn(_pop_n(bs, 2)),
-            special=ifb_fn(_pop_n(bs, 2)),
+            hp=_ifb_fn(_pop_n(bs, 2)),
+            attack=_ifb_fn(_pop_n(bs, 2)),
+            defense=_ifb_fn(_pop_n(bs, 2)),
+            speed=_ifb_fn(_pop_n(bs, 2)),
+            special=_ifb_fn(_pop_n(bs, 2)),
         )
 
 
@@ -68,15 +68,15 @@ class Stats:
     special_defense: int
 
     @classmethod
-    def parse_bytes(cls, bs: list[int] | bytearray) -> "Stats":
+    def parse_bytes(cls, bs: Bytes) -> "Stats":
         return cls(
-            max_hp=ifb_fn(_pop_n(bs, 2)),
-            hp=ifb_fn(_pop_n(bs, 2)),
-            attack=ifb_fn(_pop_n(bs, 2)),
-            defense=ifb_fn(_pop_n(bs, 2)),
-            speed=ifb_fn(_pop_n(bs, 2)),
-            special_attack=ifb_fn(_pop_n(bs, 2)),
-            special_defense=ifb_fn(_pop_n(bs, 2)),
+            max_hp=_ifb_fn(_pop_n(bs, 2)),
+            hp=_ifb_fn(_pop_n(bs, 2)),
+            attack=_ifb_fn(_pop_n(bs, 2)),
+            defense=_ifb_fn(_pop_n(bs, 2)),
+            speed=_ifb_fn(_pop_n(bs, 2)),
+            special_attack=_ifb_fn(_pop_n(bs, 2)),
+            special_defense=_ifb_fn(_pop_n(bs, 2)),
         )
 
 
@@ -105,14 +105,14 @@ class Pokemon:
             dex_id=bs.pop(0),
             item_held_id=bs.pop(0),
             moves_ids=_pop_n(bs, 4),
-            OT=ifb_fn(_pop_n(bs, 2)),
-            exp_points=ifb_fn(_pop_n(bs, 3)),
+            OT=_ifb_fn(_pop_n(bs, 2)),
+            exp_points=_ifb_fn(_pop_n(bs, 3)),
             evs=EVs.parse_evs(_pop_n(bs, 10)),
             ivs=EVs.parse_ivs(_pop_n(bs, 2)),
             moves_pps=[PP.from_byte(o) for o in _pop_n(bs, 4)],
             friendship_remaining_egg_cycles=bs.pop(0),
             pokerus=bs.pop(0),
-            caught_data=ifb_fn(_pop_n(bs, 2)),
+            caught_data=_ifb_fn(_pop_n(bs, 2)),
             level=bs.pop(0),
             status_cond=_pop_n(bs, 2)[0],  # remove unused byte too
             stats=Stats.parse_bytes(bs),
@@ -184,25 +184,21 @@ class Party:
     pokemon_nicknames: list[str]
 
     @classmethod
-    def from_bytes(cls, bs: list[int] | bytearray) -> "Party":
-        name = _pokestr_to_python_str(bytearray(_pop_n(bs, 11)))
+    def from_bytes(cls, bs: Bytes) -> "Party":
+        name = utils.pokemon.pokestr_to_python_str(
+            bytearray(_pop_n(bs, POKE_TEXT_MAX_LEN + 1)),
+        )
         n_pokes = bs.pop(0)
         _pop_n(bs, 9)  # Skip pokes ids and 2 unused bytes
 
         pokemon = [
-            Pokemon.from_bytes(bytearray(_pop_n(bs, 48))) for _ in range(n_pokes)
+            Pokemon.from_bytes(bytearray(_pop_n(bs, POKEMON_N_BYTES)))
+            for _ in range(n_pokes)
         ]
-        _pop_n(bs, (MAX_PARTY_POKEMON - n_pokes) * 48)
+        _pop_n(bs, (MAX_PARTY_POKEMON - n_pokes) * POKEMON_N_BYTES)
 
-        ots_names = [
-            _pokestr_to_python_str(bytearray(_pop_n(bs, 11))) for _ in range(n_pokes)
-        ]
-        _pop_n(bs, (MAX_PARTY_POKEMON - n_pokes) * 11)
-
-        pokemon_names = [
-            _pokestr_to_python_str(bytearray(_pop_n(bs, 11))) for _ in range(n_pokes)
-        ]
-        _pop_n(bs, (MAX_PARTY_POKEMON - n_pokes) * 11)
+        ots_names = _parse_strs(bs, n_pokes, MAX_PARTY_POKEMON)
+        pokemon_names = _parse_strs(bs, n_pokes, MAX_PARTY_POKEMON)
 
         return cls(
             trainer_name=name,
@@ -218,48 +214,39 @@ class Party:
 
         party_header = struct.pack(
             ">11BB9B",
-            *_python_text_to_pokestr(self.trainer_name),
+            *utils.pokemon.python_text_to_pokestr(self.trainer_name),
             len(self.pokemon),
             *dex_ids,
             0xF3,
             0x74,
         )
         serialized_pokemon = b"".join(p.to_bytes() for p in self.pokemon)
-        serialized_pokemon += b"\0" * 48 * n_pokemon_pad
+        serialized_pokemon += b"\0" * POKEMON_N_BYTES * n_pokemon_pad
+        pkm_names = _serialize_strs(self.pokemon_nicknames, MAX_PARTY_POKEMON)
+        ot_names = _serialize_strs(self.ots_names, MAX_PARTY_POKEMON)
 
-        serialized_ot_names = b"".join(
-            _python_text_to_pokestr(o) for o in self.ots_names
-        )
-        serialized_ot_names += b"\0" * 11 * n_pokemon_pad
+        return bytearray(party_header + serialized_pokemon + ot_names + pkm_names)
 
-        serialized_pkm_names = b"".join(
-            _python_text_to_pokestr(o) for o in self.pokemon_nicknames
-        )
-        serialized_pkm_names += b"\0" * 11 * n_pokemon_pad
 
-        return bytearray(
-            party_header
-            + serialized_pokemon
-            + serialized_ot_names
-            + serialized_pkm_names
+def _parse_strs(bs: Bytes, actual_elements: int, max_elements: int) -> list[str]:
+    names = [
+        utils.pokemon.pokestr_to_python_str(
+            bytearray(_pop_n(bs, POKE_TEXT_MAX_LEN + 1)),
         )
+        for _ in range(actual_elements)
+    ]
+    _pop_n(bs, (max_elements - actual_elements) * (POKE_TEXT_MAX_LEN + 1))
+    return names
+
+
+def _serialize_strs(strs: list[str], max_elements: int) -> bytes:
+    serialized_pkm_names = b"".join(
+        utils.pokemon.python_text_to_pokestr(o) for o in strs
+    )
+    pad = max_elements - len(strs)
+    serialized_pkm_names += b"\0" * (POKE_TEXT_MAX_LEN + 1) * pad
+    return serialized_pkm_names
 
 
 def _pop_n(bs: list[int] | bytearray, n: int = 2) -> list[int]:
     return [bs.pop(0) for _ in range(n)]
-
-
-def _pokestr_to_python_str(bs: bytearray) -> str:
-    return "".join(chr(b - POKE_TEXT_OFS) for b in bs[: bs.index(POKE_TEXT_TERMINATOR)])
-
-
-def _python_text_to_pokestr(s: str) -> bytes:
-    if len(s) > POKE_TEXT_MAX_LEN:
-        raise Exception(f"Pokemon strings have a maximum length of {POKE_TEXT_MAX_LEN}")
-
-    ps = [0] * (POKE_TEXT_MAX_LEN + 1)
-    for i, c in enumerate(s):
-        ps[i] = ord(c) + POKE_TEXT_OFS
-    ps[len(s)] = POKE_TEXT_TERMINATOR
-
-    return bytes(ps)

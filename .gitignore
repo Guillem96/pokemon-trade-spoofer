@@ -16,6 +16,5 @@ __pycache__/
 .python-version
 
 # Logs and traffic dumps
-dumps/*
 logs/*
 !.gitkeep

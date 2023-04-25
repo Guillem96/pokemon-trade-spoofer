@@ -7,21 +7,50 @@
 </head>
 
 <body>
-  <h1>💖 Hello World!</h1>
-  <p>Welcome to your Electron application.</p>
+  <div class="wrapper">
+    <div class="title">
+      <img src="/assets/img/pokeball.png">
+      <h1>Pokemon Trade Spoofer </h1>
+    </div>
 
-  <a class="nes-btn" href="#">Normal</a>
+    <form class="controls-wrapper">
+      <div class="trainer-name-input-wrapper">
+        <img class="trainer-img" src="/assets/img/trainer.gif">
+        <input type="text" name="trainer" id="trainer-name" class="nes-input" placeholder="Trainer name" maxlength="10"
+          required>
+      </div>
+      <div class="start-btn-wrapper">
+        <button type="submit" id="start-backend" class="nes-btn is-success">Start Backend</button>
+      </div>
+      <div class="clear-btn-wrapper">
+        <button type="button" id="clear-pkmn" class="nes-btn is-error">Clear X</button>
+      </div>
+    </form>
 
-  <button type="button" class="nes-btn is-primary">Primary</button>
-  <button type="button" class="nes-btn is-success">Success</button>
-  <button type="button" class="nes-btn is-warning">Warning</button>
-  <button type="button" class="nes-btn is-error">Error</button>
-  <button type="button" class="nes-btn is-disabled">Disabled</button>
+    <div class="content nes-container is-rounded">
+    </div>
 
-  <label class="nes-btn">
-    <span>Select your file</span>
-    <input type="file">
-  </label>
+  </div>
+
+  <dialog class="nes-dialog is-rounded" id="select-pkm-dialog">
+    <form method="dialog">
+      <div class="select-title">
+        <img src="/assets/img/pokeball.png">
+        <p class="title">Select Pokemon</p>
+      </div>
+
+      <label for="pokemon-selector">Select a Pokemon</label>
+      <div class="nes-select">
+        <select required id="pokemon-selector">
+        </select>
+      </div>
+
+      <menu class="dialog-menu">
+        <button id="cancel-selection" class="nes-btn">Cancel</button>
+        <button id="confirm-selection" class="nes-btn is-primary">Confirm</button>
+      </menu>
+    </form>
+  </dialog>
 </body>
 
 </html>

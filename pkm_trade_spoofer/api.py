@@ -1,5 +1,6 @@
 import asyncio
 import functools
+from typing import Any, Optional
 
 import pydantic
 import uvicorn
@@ -15,13 +16,23 @@ from pkm_trade_spoofer.pokemon import pokemon_by_id
 LOGGER = logger.get_logger(__name__)
 
 
-class SimplePokemon(pydantic.BaseModel):
+def to_camel(string: str) -> str:
+    initial, *remaining = string.split("_")
+    return initial + "".join(word.capitalize() for word in remaining)
+
+
+class _PokeApiBaseModel(pydantic.BaseModel):
+    class Config:
+        alias_generator = to_camel
+
+
+class SimplePokemon(_PokeApiBaseModel):
     """Simple pokemon schema transferred between front-end and back-end."""
 
     nickname: str
     dex_id: int = pydantic.Field(ge=0, le=251)  # type: ignore
-    ivs: list[int] = pydantic.Field(min_items=5, max_items=5)
-    held_item_id: int
+    ivs: Optional[list[int]] = pydantic.Field(None, min_items=5, max_items=5)
+    held_item_id: Optional[int] = None
 
     @pydantic.validator("ivs")
     def _ivs_validator(cls, ivs: list[int]) -> list[int]:
@@ -30,21 +41,21 @@ class SimplePokemon(pydantic.BaseModel):
         return ivs
 
 
-class SimpleParty(pydantic.BaseModel):
+class SimpleParty(_PokeApiBaseModel):
     """Simplified pokemon party schema."""
 
     trainer_name: str
     pokemon: list[SimplePokemon] = pydantic.Field(min_items=0, max_items=6)
 
 
-class StartBackendRequest(pydantic.BaseModel):
+class StartBackendRequest(_PokeApiBaseModel):
     """Schema of start-backend request body."""
 
     party: SimpleParty
     backend: BackendTypes
 
 
-class StopBackendRequest(pydantic.BaseModel):
+class StopBackendRequest(_PokeApiBaseModel):
     """stop-backend request body schema."""
 
     backend: BackendTypes
@@ -73,6 +84,7 @@ class ManagementAPI(object):
     def __init__(
         self,
         backends: dict[BackendTypes, Backend],
+        loop: Optional[asyncio.AbstractEventLoop] = None,
         host: str = "127.0.0.1",
         port: int = 8000,
         secret: str = "",
@@ -82,7 +94,7 @@ class ManagementAPI(object):
         self._backends = backends
         self._running_backends: set[BackendTypes] = set()
         self._lock = asyncio.Lock()
-
+        self._loop = loop or asyncio.get_running_loop()
         self.app = FastAPI(title="Pokemon GSC Trade Spoofer")
         self.app.state.secret_token = secret
 
@@ -91,32 +103,43 @@ class ManagementAPI(object):
 
         This method is blocking.
         """
+        responses: dict[int | str, dict[str, Any]] = {
+            200: {"model": Response},
+            400: {"model": Response},
+            401: {"model": HTTPError},
+            500: {"model": Response},
+        }
+
         self.app.add_api_route(
             "/start-backend",
             self._start_backend,
-            responses={
-                200: {"model": Response},
-                400: {"model": Response},
-                401: {"model": HTTPError},
-                500: {"model": Response},
-            },
+            responses=responses,
             dependencies=[Depends(_check_secret)],
             methods=["POST"],
         )
 
-        uvicorn.run(
-            self.app,
-            loop="none",
+        self.app.add_api_route(
+            "/stop-backend",
+            self._stop_backend,
+            responses=responses,
+            dependencies=[Depends(_check_secret)],
+            methods=["POST"],
+        )
+
+        config = uvicorn.Config(
+            app=self.app,
+            loop=self._loop,  # type: ignore
             host=self._host,
             port=self._port,
-            # log_config=None,
         )
+        server = uvicorn.Server(config)
+        self._loop.run_until_complete(server.serve())
 
     def stop(self) -> None:
         """Stops the management API, as well as, the started backends."""
 
         for b in self._backends.values():
-            b.stop()
+            self._loop.run_until_complete(b.stop())
 
     async def _start_backend(
         self,
@@ -148,13 +171,13 @@ class ManagementAPI(object):
             res_msg = f"Backend {stop_backend_req.backend} is not running."
             return _json_response(Response(message=res_msg), status_code=400)
 
-        self._backends[stop_backend_req.backend].stop()
+        await self._backends[stop_backend_req.backend].stop()
 
         async with self._lock:
             self._running_backends.remove(stop_backend_req.backend)
 
         res_msg = f"Backend {stop_backend_req.backend} stopped successfully."
-        return _json_response(Response(message=res_msg), status_code=400)
+        return _json_response(Response(message=res_msg), status_code=200)
 
 
 def _json_response(content: pydantic.BaseModel, status_code: int) -> JSONResponse:
@@ -181,7 +204,7 @@ async def _simple_pkm_to_complex(pkm: SimplePokemon) -> Pokemon:
         functools.partial(
             pokemon_by_id,
             pkm.dex_id,
-            ivs=EVs(*pkm.ivs),
+            ivs=EVs(*pkm.ivs) if pkm.ivs else EVs(0, 0, 0, 0, 0),
             item_held_id=pkm.held_item_id,
         ),
     )

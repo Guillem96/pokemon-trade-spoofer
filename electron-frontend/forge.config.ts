@@ -38,6 +38,12 @@ const config: ForgeConfig = {
           },
         ],
       },
+      devContentSecurityPolicy: [
+        'default-src *',
+        'img-src \'self\' * data:',
+        'script-src \'self\' \'unsafe-inline\' \'unsafe-eval\' *',
+        'style-src \'self\' \'unsafe-inline\'',
+      ].join(';')
     }),
   ],
 };

@@ -304,11 +304,12 @@ class BGBLinkCableServer:
         if self._blocking:
             await self._server.serve_forever()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         if self._connections:
             for c in self._connections:
                 c.cancel()
-            _, pending = self._loop.run_until_complete(asyncio.wait(self._connections))
+
+            _, pending = await asyncio.wait(self._connections)
             if pending:
                 raise asyncio.InvalidStateError(
                     f"Unexpected state, {pending} should be done.",
@@ -316,4 +317,4 @@ class BGBLinkCableServer:
 
         if self._server is not None:
             self._server.close()
-            self._loop.run_until_complete(self._server.wait_closed())
+            await self._server.wait_closed()

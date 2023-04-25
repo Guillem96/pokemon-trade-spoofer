@@ -33,8 +33,8 @@ class BGBBackend(object):
             functools.partial(self._master_data_handler_state_machine, party),
         )
 
-    def stop(self) -> None:
-        self._server.stop()
+    async def stop(self) -> None:
+        await self._server.stop()
 
     async def _master_data_handler_state_machine(
         self,

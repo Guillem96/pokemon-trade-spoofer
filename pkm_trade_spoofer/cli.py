@@ -54,7 +54,7 @@ def admin_api_cmd(
         BackendTypes.bgb_emulator: BGBBackend(bgb_host, bgb_port, loop),
     }
 
-    admin_api = ManagementAPI(backends, host=host, port=port, secret=secret)
+    admin_api = ManagementAPI(backends, loop=loop, host=host, port=port, secret=secret)
     try:
         admin_api.start()
     except KeyboardInterrupt:
@@ -84,7 +84,7 @@ def bgb_cmd(
         cli_logger.info("Stopping spoofer with CTRL+C")
     finally:
         cli_logger.info("Graceful shutdown...")
-        backend.stop()
+        loop.run_until_complete(backend.stop())
         loop.close()
 
 
@@ -96,8 +96,6 @@ def _setup_event_loop(cli_logger: logging.Logger) -> asyncio.AbstractEventLoop:
         signal.SIGTERM,
         lambda: _signal_handler(cli_logger, "SIGTERM", loop),
     )
-    print("***********", loop, id(loop))
-
     return loop
 
 

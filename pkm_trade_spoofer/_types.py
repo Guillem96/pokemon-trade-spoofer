@@ -12,5 +12,5 @@ class Backend(Protocol):
     async def start(self, party: Party) -> None:
         ...
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         ...

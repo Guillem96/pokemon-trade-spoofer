@@ -67,6 +67,15 @@ class Response(pydantic.BaseModel):
     message: str
 
 
+class BackendStatesResponse(pydantic.BaseModel):
+    """Response containing the status of each backend.
+
+    Status is set to true if backend is running.
+    """
+
+    states: dict[str, bool]
+
+
 class HTTPError(pydantic.BaseModel):
     """HTTP Error message schema."""
 
@@ -111,6 +120,17 @@ class ManagementAPI(object):
         }
 
         self.app.add_api_route(
+            "/ping",
+            self._ping,
+            responses={
+                200: {"model": BackendStatesResponse},
+                401: {"model": HTTPError},
+                500: {"model": Response},
+            },
+            dependencies=[Depends(_check_secret)],
+            methods=["GET"],
+        )
+        self.app.add_api_route(
             "/start-backend",
             self._start_backend,
             responses=responses,
@@ -126,6 +146,17 @@ class ManagementAPI(object):
             methods=["POST"],
         )
 
+        self.app.add_api_route(
+            "/backends-state",
+            self._backend_states,
+            responses={
+                200: {"model": BackendStatesResponse},
+                401: {"model": HTTPError},
+                500: {"model": Response},
+            },
+            dependencies=[Depends(_check_secret)],
+            methods=["GET"],
+        )
         config = uvicorn.Config(
             app=self.app,
             loop=self._loop,  # type: ignore
@@ -178,6 +209,16 @@ class ManagementAPI(object):
 
         res_msg = f"Backend {stop_backend_req.backend} stopped successfully."
         return _json_response(Response(message=res_msg), status_code=200)
+
+    async def _backend_states(self) -> JSONResponse:
+        state = {
+            str(backend): backend in self._running_backends
+            for backend in self._backends
+        }
+        return _json_response(BackendStatesResponse(states=state), status_code=200)
+
+    async def _ping(self) -> JSONResponse:
+        return _json_response(Response(message="pong"), status_code=200)
 
 
 def _json_response(content: pydantic.BaseModel, status_code: int) -> JSONResponse:

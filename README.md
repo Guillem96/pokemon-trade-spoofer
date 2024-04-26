@@ -2,7 +2,6 @@
 
 Trade whatever Pokemon you want to your childhood Pokemon Gold/Silver/Crystal versions.
 
-
 ## Developer Guide 👨🏻‍💻
 
 ### Pokemon Trading State Machine 🎰
@@ -19,21 +18,23 @@ slight modification of the State pattern defined [here](https://python-3-pattern
 State Machine Components:
 
 - `State`: Has a `run` method which implements the behavior of the according state and
-returns an instance of the next state. Additionally, the `run` method receives a `Context`
-object as a parameter.
+  returns an instance of the next state. Additionally, the `run` method receives a `Context`
+  object as a parameter.
 
 - `Context`: Contains the state machine shared information. In our case: the Pokemon to be traded,
-the received party from the other player, etc.
+  the received party from the other player, etc.
 
 - `StateMachine`: The state machine itself is the owner of the `Context` and keeps a reference
-to the current state. Every time, the `State.run` returns, the state machine manages the
-execution of the new state.
+  to the current state. Every time, the `State.run` returns, the state machine manages the
+  execution of the new state.
 
 See in the image below the state machine implemented:
 
 ![](img/state-machine.drawio.svg)
 
 ### Frontend ⚛
+
+![Desktop App Screenshot](/img/desktop-app.png)
 
 The frontend is a desktop application developed in [electron](https://www.electronjs.org/es/).
 To communicate the electron frontend with the python package running the backends (BGB, ...), I developed a
@@ -47,7 +48,7 @@ At launch, electron app spawns a process running the aforementioned Management
 API, then as usual, a window with a web interface (built with HTML, CSS and typescript)
 pops, so the user can easily interact with the Pokemon trade spoofer.
 
-Check the implementation under the [electron-frontend](electron-frontend) directory.
+Check the implementation under the [desktop-app](desktop-app) directory.
 
 ### Management API
 
@@ -60,10 +61,9 @@ It only provides two endpoints:
 
 Check the implementation [here](pkm_trade_spoofer/api.py).
 
-
 ## Shout-out and credits
 
 - Thanks for the amazing [write up](https://blog.gbplay.io/2021/05/11/Emulating-a-Pokemon-Trade-with-Generated-Link-Cable-Data.html)
-on how to use BGB link cable data to emulate Pokemon R/B/Y trades.
+  on how to use BGB link cable data to emulate Pokemon R/B/Y trades.
 
 - BGB Link Server base implementation from [Matt Penny](https://github.com/mwpenny)

@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pokemon-trade-spoofer"
+name = "pkm_trade_spoofer"
 version = "0.0.1"
 description = "Python package to spoof Pokemon trades in Gold/Silver/Crystal versions"
 authors = ["Guillem96 <guillem.orellana@gmail.com>"]
@@ -19,7 +19,7 @@ keywords = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.13"
 PyYAML = "*"
 typer = { version = "*", extras = ["all"] }
 coloredlogs = "*"
@@ -35,7 +35,7 @@ isort = "*"
 black = "*"
 flake8 = "*"
 toml = "*"
-pyinstaller = "*"
+pyinstaller = "^6.6.0"
 mypy = "^0.991"
 pre-commit = "^2.20.0"
 

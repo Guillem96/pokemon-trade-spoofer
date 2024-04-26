@@ -2,6 +2,8 @@
 
 Trade whatever Pokemon you want to your childhood Pokemon Gold/Silver/Crystal versions.
 
+![Desktop App Screenshot](/img/desktop-app.png)
+
 ## Developer Guide 👨🏻‍💻
 
 ### Pokemon Trading State Machine 🎰
@@ -33,8 +35,6 @@ See in the image below the state machine implemented:
 ![](img/state-machine.drawio.svg)
 
 ### Frontend ⚛
-
-![Desktop App Screenshot](/img/desktop-app.png)
 
 The frontend is a desktop application developed in [electron](https://www.electronjs.org/es/).
 To communicate the electron frontend with the python package running the backends (BGB, ...), I developed a
